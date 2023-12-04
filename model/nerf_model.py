@@ -34,10 +34,8 @@ class Nerf(nn.Module):
        
        
         self.lineal_hidden = nn.ModuleList([
-            nn.Sequential(
-                self.lineal_position_input, #[60,128]
-                nn.Linear(hidden_unit_num, hidden_unit_num) #[128,128]
-            ) if i != self.skip else self.lineal_position_skip_input
+            nn.Linear(hidden_unit_num, hidden_unit_num) #[128,128]
+            if i != self.skip else self.lineal_position_skip_input
             for i in range(network_depth - 1)
         ])
         self.lineal_features  = nn.Linear(hidden_unit_num,output_features_dim) #输出256特征 
@@ -67,24 +65,26 @@ class Nerf(nn.Module):
         # encoded_view_direction =  view_dir
         
         #开始输送数据并激活
-        input_data = encoded_position
+        input_data = self.lineal_position_input(encoded_position)
         for i,lineal_item in enumerate(self.lineal_hidden):
+            if i == self.skip:
+                input_data = torch.cat([encoded_position, input_data], dim=-1) #跳跃连接：拼接一下输入的数据
             input_data = self.lineal_hidden[i](input_data) #传入数据
-            input_data = nn.relu(input_data) 
-            if i == self.skips:
-                input_data = torch.cat([encoded_position, input_data], -1) #跳跃连接：拼接一下输入的数据
+            input_data = nn.functional.relu(input_data) 
+
+
        
         #输出density: volume_density 
         density = self.lineal_density(input_data)
        
         #RGB: emitted_color (r,g,b) 
-        feature = self.self.lineal_features(input_data) #256维
+        feature = self.lineal_features(input_data) #256维
         input_data = torch.cat([feature, encoded_view_direction], -1) 
         input_data = self.lineal_view_input(input_data)
-        input_data = nn.relu(input_data)
+        input_data = nn.functional.relu(input_data)
         rgb = self.lineal_colorRGB(input_data)
         
-        return      
+        return torch.cat([rgb,density],dim=-1)
     
 
     def _init_weights(self,m):
